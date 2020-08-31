@@ -16,8 +16,9 @@
 # limitations under the License.
 
 """
-Removes all residues matching the given name in the PDB file. Residues names are
-matched *without* taking into consideration spaces.
+Removes all residues matching the given name in the PDB file.
+
+Residues names are matched *without* taking into consideration spaces.
 
 Usage:
     python pdb_delresname.py -<option> <pdb file>
@@ -109,8 +110,6 @@ def check_input(args):
                 sys.exit(1)
 
     return (option_set, fh)
-
-    return (option, fh)
 
 
 def delete_residue_by_name(fhandle, resname_set):

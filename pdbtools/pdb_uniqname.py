@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright 2018 João Pedro Rodrigues
+# Copyright 2020 João Pedro Rodrigues
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,16 +16,15 @@
 # limitations under the License.
 
 """
-Swaps the chain identifier by the segment identifier.
+Renames atoms sequentially (C1, C2, O1, ...) for each HETATM residue.
 
-If the segment identifier is longer than one character, the script will
-truncate it. Does not ensure unique chain IDs.
+Relies on an element column being present (see pdb_element).
 
 Usage:
-    python pdb_segxchain.py <pdb file>
+    python pdb_uniqname.py <pdb file>
 
 Example:
-    python pdb_segxchain.py 1CTF.pdb
+    python pdb_uniqname.py 1CTF.pdb
 
 This program is part of the `pdb-tools` suite of utilities and should not be
 distributed isolatedly. The `pdb-tools` were created to quickly manipulate PDB
@@ -34,15 +33,16 @@ data to another. They are based on old FORTRAN77 code that was taking too much
 effort to maintain and compile. RIP.
 """
 
+import collections
 import os
 import sys
 
-__author__ = "Joao Rodrigues"
-__email__ = "j.p.g.l.m.rodrigues@gmail.com"
+__author__ = ["Joao Rodrigues"]
+__email__ = ["j.p.g.l.m.rodrigues@gmail.com"]
 
 
 def check_input(args):
-    """Checks whether to read from stdin/file and validates user input/options.
+    """Checks whether to read from stdin/file.
     """
 
     # Defaults
@@ -55,7 +55,7 @@ def check_input(args):
             sys.exit(1)
 
     elif len(args) == 1:
-        # Reading from file
+        # Input File
         if not os.path.isfile(args[0]):
             emsg = 'ERROR!! File not found or not readable: \'{}\'\n'
             sys.stderr.write(emsg.format(args[0]))
@@ -65,47 +65,40 @@ def check_input(args):
         fh = open(args[0], 'r')
 
     else:  # Whatever ...
-        emsg = 'ERROR!! Script takes 1 argument, not \'{}\'\n'
-        sys.stderr.write(emsg.format(len(args)))
         sys.stderr.write(__doc__)
         sys.exit(1)
 
     return fh
 
 
-def pad_line(line):
-    """Helper function to pad line to 80 characters in case it is shorter"""
-    size_of_line = len(line)
-    if size_of_line < 80:
-        padding = 80 - size_of_line + 1
-        line = line.strip('\n') + ' ' * padding + '\n'
-    return line[:81]  # 80 + newline character
-
-
-def place_seg_on_chain(fhandle):
-    """Replaces the chain identifier with the contents of the segment identifier.
-
-    Truncates the segment identifier to its first character.
+def rename_atoms(fhandle):
+    """Renames HETATM atoms on each residue based on their element.
     """
 
-    prev_line = None
+    prev_res = None
+    for line_idx, line in enumerate(fhandle):
+        if line.startswith('HETATM'):
 
-    _pad_line = pad_line
-    records = ('ATOM', 'HETATM', 'ANISOU')
-    for line in fhandle:
-        if line.startswith(records):
-            line = _pad_line(line)
-            # trick to pick first non-empty character of segid OR empty space
-            # [0] on '' gives error, [:1] returns '', with ljust(1) == ' '
-            segid = line[72:76].strip()[:1]
-            yield line[:21] + segid.ljust(1) + line[22:]
-            prev_line = line
-        elif line.startswith('TER'):  # use previous chain ID
-            line = _pad_line(line)
-            segid = prev_line[72:76].strip()[:1]
-            yield line[:21] + segid.ljust(1) + line[22:]
-        else:
-            yield line
+            element = line[76:78].strip()
+
+            if not element:
+                emsg = 'ERROR!! No element found in line {}'.format(line_idx)
+                sys.stderr.write(emsg)
+                sys.exit(1)
+
+            resuid = line[17:27]
+
+            if prev_res != resuid:
+                prev_res = resuid
+                element_idx = collections.defaultdict(lambda: 1)  # i.e. a counter
+
+            spacer = ' ' if len(element) == 1 else ''
+            name = (spacer + element + str(element_idx[element])).ljust(4)
+            line = line[:12] + name + line[16:]
+
+            element_idx[element] += 1
+
+        yield line
 
 
 def main():
@@ -113,7 +106,7 @@ def main():
     pdbfh = check_input(sys.argv[1:])
 
     # Do the job
-    new_pdb = place_seg_on_chain(pdbfh)
+    new_pdb = rename_atoms(pdbfh)
 
     try:
         _buffer = []

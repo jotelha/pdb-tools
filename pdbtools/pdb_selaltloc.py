@@ -16,9 +16,10 @@
 # limitations under the License.
 
 """
-Picks one location for each atom with fractional occupancy values. By default,
-picks the atom with the highest occupancy value. User can define one specific
-location using an option.
+Selects altloc labels for the entire PDB file.
+
+By default, picks the label with the highest occupancy value for each atom,
+but the user can define a specific label. Removes all labels afterwards.
 
 Usage:
     python pdb_selaltloc.py [-<option>] <pdb file>
@@ -131,7 +132,7 @@ def select_occupancy(fhandle, option):
     else:  # get altloc
         option_set = set((option, ' '))
         get_prop = lambda l: l[16]
-        sel_prop = lambda d: [l for l in d if l[1] in option_set][0]
+        sel_prop = lambda d: [ln for ln in d if ln[1] in option_set][0]
 
     # We have to iterate multiple times
     atom_prop = {}  # {atom_uid: (lineno, prop)}

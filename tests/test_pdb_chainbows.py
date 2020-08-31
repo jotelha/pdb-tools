@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright 2018 João Pedro Rodrigues
+# Copyright 2020 João Pedro Rodrigues
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 # limitations under the License.
 
 """
-Unit Tests for `pdb_wc`.
+Unit Tests for `pdb_chainbows`.
 """
 
 import os
@@ -34,7 +34,7 @@ class TestTool(unittest.TestCase):
 
     def setUp(self):
         # Dynamically import the module
-        name = 'pdbtools.pdb_wc'
+        name = 'pdbtools.pdb_chainbows'
         self.module = __import__(name, fromlist=[''])
 
     def exec_module(self):
@@ -54,7 +54,7 @@ class TestTool(unittest.TestCase):
         return
 
     def test_default(self):
-        """$ pdb_wc data/dummy.pdb"""
+        """$ pdb_chainbows data/dummy.pdb"""
 
         fpath = os.path.join(data_dir, 'dummy.pdb')
         sys.argv = ['', fpath]
@@ -63,55 +63,34 @@ class TestTool(unittest.TestCase):
         self.exec_module()
 
         # Validate results
-        self.assertEqual(self.retcode, 0)
-        self.assertEqual(len(self.stdout), 7)
-        self.assertEqual(len(self.stderr), 0)
-
-        self.assertEqual(self.stdout,
-                         ["No. models:\t1",
-                          "No. chains:\t4\t(   4.0/model)",
-                          "No. residues:\t10\t(  10.0/model)",
-                          "No. atoms:\t176\t( 176.0/model)",
-                          "No. HETATM:\t9",
-                          "Multiple Occ.:\tTrue",
-                          "Res. Inserts:\tFalse"])
-
-    def test_single_option_1(self):
-        """$ pdb_wc -m data/ensemble_OK.pdb"""
-
-        fpath = os.path.join(data_dir, 'ensemble_OK.pdb')
-        sys.argv = ['', '-m', fpath]
-
-        # Execute the script
-        self.exec_module()
-
-        # Validate results
         self.assertEqual(self.retcode, 0)  # ensure the program exited OK.
-        self.assertEqual(len(self.stdout), 2)
-        self.assertEqual(len(self.stderr), 0)  # no errors
+        # CONECTs are ignored by issue #72, expected only 204 lines
+        self.assertEqual(len(self.stdout), 204)
+        self.assertEqual(len(self.stderr), 0)  # no warnings/errors
 
-        self.assertEqual(self.stdout,
-                         ["No. models:\t2", "\t->\t1,2"])
+        # Check chains were reassigned properly
+        expected = ['A'] * 51 + ['B'] * 56 + ['C'] * 49 + ['D'] * 20
+        chains = [
+            l[21] for l in self.stdout if l.startswith('ATOM')
+        ]
+        self.assertEqual(chains, expected)
 
-    def test_single_option_2(self):
-        """$ pdb_wc -c data/dummy.pdb"""
+        # Check TERs
+        expected = ['A', 'B', 'C']
+        chains = [
+            l[21] for l in self.stdout if l.startswith('TER')
+        ]
+        self.assertEqual(chains, expected)
 
-        fpath = os.path.join(data_dir, 'dummy.pdb')
-        sys.argv = ['', '-c', fpath]
-
-        # Execute the script
-        self.exec_module()
-
-        # Validate results
-        self.assertEqual(self.retcode, 0)  # ensure the program exited OK.
-        self.assertEqual(len(self.stdout), 2)
-        self.assertEqual(len(self.stderr), 0)  # no errors
-
-        self.assertEqual(self.stdout,
-                         ['No. chains:\t4\t(   4.0/model)', '\t->\tA,B,C,D'])
+        # Check HETATM were reassigned properly
+        expected = ['B', 'B', 'B', 'A', 'C', 'C', 'C', 'C', 'C']
+        chains = [
+            l[21] for l in self.stdout if l.startswith('HETATM')
+        ]
+        self.assertEqual(chains, expected)
 
     def test_file_not_found(self):
-        """$ pdb_wc not_existing.pdb"""
+        """$ pdb_chainbows not_existing.pdb"""
 
         # Error (file not found)
         afile = os.path.join(data_dir, 'not_existing.pdb')
@@ -126,7 +105,7 @@ class TestTool(unittest.TestCase):
                          "ERROR!! File not found")
 
     def test_helptext(self):
-        """$ pdb_wc"""
+        """$ pdb_chainbows"""
 
         sys.argv = ['']
 
@@ -138,9 +117,9 @@ class TestTool(unittest.TestCase):
         self.assertEqual(self.stderr, self.module.__doc__.split("\n")[:-1])
 
     def test_invalid_option(self):
-        """$ pdb_wc -X data/dummy.pdb"""
+        """$ pdb_chainbows -A data/dummy.pdb"""
 
-        sys.argv = ['', '-X', os.path.join(data_dir, 'dummy.pdb')]
+        sys.argv = ['', '-A', os.path.join(data_dir, 'dummy.pdb')]
 
         # Execute the script
         self.exec_module()
@@ -148,7 +127,7 @@ class TestTool(unittest.TestCase):
         self.assertEqual(self.retcode, 1)
         self.assertEqual(len(self.stdout), 0)
         self.assertEqual(self.stderr[0][:36],
-                         "ERROR!! The following options are no")
+                         "ERROR!! Script takes 1 argument, not")
 
 
 if __name__ == '__main__':

@@ -17,6 +17,7 @@
 
 """
 Modifies the file to adhere (as much as possible) to the format specifications.
+
 Expects a sorted file - REMARK/ATOM/HETATM/END - so use pdb_sort in case you are
 not sure.
 
@@ -28,10 +29,11 @@ This includes:
 Will remove all original TER/END statements from the file.
 
 Usage:
-    python pdb_tidy.py <pdb file>
+    python pdb_tidy.py [-strict] <pdb file>
 
 Example:
     python pdb_tidy.py 1CTF.pdb
+    python pdb_tidy.py -strict 1CTF.pdb  # does not add TER on chain breaks
 
 This program is part of the `pdb-tools` suite of utilities and should not be
 distributed isolatedly. The `pdb-tools` were created to quickly manipulate PDB
@@ -52,6 +54,7 @@ def check_input(args):
     """
 
     # Defaults
+    option = False
     fh = sys.stdin  # file handle
 
     if not len(args):
@@ -61,26 +64,55 @@ def check_input(args):
             sys.exit(1)
 
     elif len(args) == 1:
-        if not os.path.isfile(args[0]):
-            emsg = 'ERROR!! File not found or not readable: \'{}\'\n'
+        # One of two options: option & Pipe OR file & default option
+        if args[0] == '-strict':
+            option = True
+            if sys.stdin.isatty():  # ensure the PDB data is streamed in
+                emsg = 'ERROR!! No data to process!\n'
+                sys.stderr.write(emsg)
+                sys.stderr.write(__doc__)
+                sys.exit(1)
+
+        else:
+            if not os.path.isfile(args[0]):
+                emsg = 'ERROR!! File not found or not readable: \'{}\'\n'
+                sys.stderr.write(emsg.format(args[0]))
+                sys.stderr.write(__doc__)
+                sys.exit(1)
+
+            fh = open(args[0], 'r')
+
+    elif len(args) == 2:
+        # Two options: option & File
+        if not args[0] == '-strict':
+            emsg = 'ERROR! First argument is not a valid option: \'{}\'\n'
             sys.stderr.write(emsg.format(args[0]))
             sys.stderr.write(__doc__)
             sys.exit(1)
 
-        fh = open(args[0], 'r')
+        if not os.path.isfile(args[1]):
+            emsg = 'ERROR!! File not found or not readable: \'{}\'\n'
+            sys.stderr.write(emsg.format(args[1]))
+            sys.stderr.write(__doc__)
+            sys.exit(1)
+
+        option = args[0][1:]
+        fh = open(args[1], 'r')
 
     else:  # Whatever ...
-        emsg = 'ERROR!! Script takes 1 argument, not \'{}\'\n'
-        sys.stderr.write(emsg.format(len(args)))
         sys.stderr.write(__doc__)
         sys.exit(1)
 
-    return fh
+    return (option, fh)
 
 
-def tidy_pdbfile(fhandle):
+def tidy_pdbfile(fhandle, strict=False):
     """Adds TER/END statements and pads all lines to 80 characters.
+
+    If strict is True, does not add TER statements at intra-chain breaks.
     """
+
+    not_strict = not strict
 
     def make_TER(prev_line):
         """Creates a TER statement based on the last ATOM/HETATM line.
@@ -97,13 +129,9 @@ def tidy_pdbfile(fhandle):
 
     # TER     606      LEU A  75
     fmt_TER = "TER   {:>5d}      {:3s} {:1s}{:>4s}{:1s}" + " " * 53 + "\n"
-    # CONECT 1179  746 1184 1195 1203
-    fmt_CONECT = "CONECT{:>5s}{:>5s}{:>5s}{:>5s}{:>5s}" + " " * 49 + "\n"
-    char_ranges = (slice(6, 11), slice(11, 16),
-                   slice(16, 21), slice(21, 26), slice(26, 31))
 
     records = ('ATOM', 'HETATM')
-    ignored = ('TER', 'END ', 'END\n')
+    ignored = ('TER', 'END ', 'END\n', 'CONECT')
     # Iterate up to the first ATOM/HETATM line
     prev_line = None
     for line in fhandle:
@@ -123,7 +151,6 @@ def tidy_pdbfile(fhandle):
             break
 
     # Now go through all the remaining lines
-    serial_equiv = {}  # store for conect statements
     atom_section = False
     serial_offset = 0  # To offset after adding TER records
     for line in fhandle:
@@ -138,7 +165,7 @@ def tidy_pdbfile(fhandle):
         if line.startswith('ATOM'):
 
             is_gap = (int(line[22:26]) - int(prev_line[22:26])) > 1
-            if atom_section and (line[21] != prev_line[21] or is_gap):
+            if atom_section and (line[21] != prev_line[21] or (not_strict and is_gap)):
                 serial_offset += 1  # account for TER statement
                 yield make_TER(prev_line)
 
@@ -162,19 +189,6 @@ def tidy_pdbfile(fhandle):
             # Avoids doing the offset again
             serial = int(prev_line[6:11])
             line = line[:6] + str(serial).rjust(5) + line[11:]
-
-        elif line.startswith('CONECT'):
-            if atom_section:
-                atom_section = False
-                yield make_TER(prev_line)
-
-            # 6:11, 11:16, 16:21, 21:26, 26:31
-            serials = [line[cr] for cr in char_ranges]
-            # If not found, return default
-            new_serials = [str(serial_equiv.get(s, s)) for s in serials]
-            conect_line = fmt_CONECT.format(*new_serials)
-            yield conect_line
-            continue
 
         else:
             if atom_section:
@@ -207,10 +221,10 @@ def tidy_pdbfile(fhandle):
 
 def main():
     # Check Input
-    pdbfh = check_input(sys.argv[1:])
+    strict, pdbfh = check_input(sys.argv[1:])
 
     # Do the job
-    new_pdb = tidy_pdbfile(pdbfh)
+    new_pdb = tidy_pdbfile(pdbfh, strict)
 
     try:
         _buffer = []

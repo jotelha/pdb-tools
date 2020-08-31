@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright 2018 João Pedro Rodrigues
+# Copyright 2020 João Pedro Rodrigues
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 # limitations under the License.
 
 """
-Unit Tests for `pdb_mkensemble`.
+Unit Tests for `pdb_uniqname`.
 """
 
 import os
@@ -34,7 +34,7 @@ class TestTool(unittest.TestCase):
 
     def setUp(self):
         # Dynamically import the module
-        name = 'pdbtools.pdb_mkensemble'
+        name = 'pdbtools.pdb_uniqname'
         self.module = __import__(name, fromlist=[''])
 
     def exec_module(self):
@@ -54,54 +54,53 @@ class TestTool(unittest.TestCase):
         return
 
     def test_default(self):
-        """$ pdb_mkensemble data/dummy.pdb"""
+        """$ pdb_uniqname data/hetatm.pdb"""
 
         # Simulate input
-        sys.argv = ['', os.path.join(data_dir, 'dummy.pdb'),
-                    os.path.join(data_dir, 'dummy.pdb')]
+        sys.argv = ['', os.path.join(data_dir, 'hetatm.pdb')]
 
         # Execute the script
         self.exec_module()
 
         # Validate results
-        self.assertEqual(self.retcode, 0)
-        self.assertEqual(len(self.stdout), 385)
-        self.assertEqual(len(self.stderr), 0)
+        self.assertEqual(self.retcode, 0)  # ensure the program exited OK.
+        self.assertEqual(len(self.stdout), 19)  # no lines deleted
+        self.assertEqual(len(self.stderr), 0)  # no errors
 
-    def test_default_multiple(self):
-        """$ pdb_mkensemble data/dummy.pdb x20"""
+        records = ('ATOM', 'HETATM')
+        atnames = [l[12:16] for l in self.stdout if l.startswith(records)]
+
+        self.assertEqual(
+            atnames,
+            [
+                ' C1 ', ' C2 ', ' H1 ', ' C3 ',
+                'CA1 ', 'CA2 ', ' H1 ', ' H2 ',
+                ' C1 ', ' C2 ', ' H  ', ' H  '
+            ]
+        )
+
+    def test_error(self):
+        """$ pdb_uniqname data/hetatm_bad.pdb"""
 
         # Simulate input
-        args = [os.path.join(data_dir, 'dummy.pdb') for _ in range(20)]
-        sys.argv = [''] + args
+        sys.argv = ['', os.path.join(data_dir, 'hetatm_bad.pdb')]
 
         # Execute the script
         self.exec_module()
 
         # Validate results
-        self.assertEqual(self.retcode, 0)
-        self.assertEqual(len(self.stdout), 3823)
-        self.assertEqual(len(self.stderr), 0)
+        self.assertEqual(self.retcode, 1)  # ensure the program threw an error
+        self.assertEqual(len(self.stdout), 0)  # no output
 
-        # Validate MODEL lines
-        model_no = [
-            int(line[10:14])
-            for line in self.stdout
-            if line.startswith('MODEL')
-        ]
-        model_no = sorted(set(model_no))
-        n_models = len(model_no)
-        self.assertEqual(n_models, 20)
-        self.assertEqual(model_no, list(range(1, 21)))
+        self.assertEqual(self.stderr[0][:22],
+                         "ERROR!! No element fou")  # proper error message
 
     def test_file_not_found(self):
-        """$ pdb_mkensemble not_existing.pdb"""
+        """$ pdb_uniqname not_existing.pdb"""
 
-        # Error (file not found)
         afile = os.path.join(data_dir, 'not_existing.pdb')
         sys.argv = ['', afile]
 
-        # Execute the script
         self.exec_module()
 
         self.assertEqual(self.retcode, 1)  # exit code is 1 (error)
@@ -109,17 +108,41 @@ class TestTool(unittest.TestCase):
         self.assertEqual(self.stderr[0][:22],
                          "ERROR!! File not found")  # proper error message
 
-    def test_helptext(self):
-        """$ pdb_mkensemble"""
+    def test_file_missing(self):
+        """$ pdb_uniqname"""
 
         sys.argv = ['']
 
-        # Execute the script
         self.exec_module()
 
         self.assertEqual(self.retcode, 1)
         self.assertEqual(len(self.stdout), 0)  # no output
-        self.assertEqual(self.stderr, self.module.__doc__.split("\n")[:-1])
+        self.assertEqual(self.stderr[1],
+                         self.module.__doc__.split("\n")[1])
+
+    def test_helptext(self):
+        """$ pdb_uniqname"""
+
+        sys.argv = ['']
+
+        self.exec_module()
+
+        self.assertEqual(self.retcode, 1)  # ensure the program exited gracefully.
+        self.assertEqual(len(self.stdout), 0)  # no output
+        self.assertEqual(self.stderr[1],
+                         self.module.__doc__.split("\n")[1])
+
+    def test_invalid_option(self):
+        """$ pdb_uniqname -A data/dummy.pdb"""
+
+        sys.argv = ['', '-A', os.path.join(data_dir, 'dummy.pdb')]
+
+        self.exec_module()
+
+        self.assertEqual(self.retcode, 1)
+        self.assertEqual(len(self.stdout), 0)
+        self.assertEqual(self.stderr[1],
+                         self.module.__doc__.split("\n")[1])
 
 
 if __name__ == '__main__':

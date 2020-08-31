@@ -4,7 +4,7 @@
 [![Travis (.org) branch](https://img.shields.io/travis/haddocking/pdb-tools/master.svg?style=flat&label=TravisCI)](https://travis-ci.org/haddocking/pdb-tools)
 [![AppVeyor branch](https://img.shields.io/appveyor/ci/JoaoRodrigues/pdb-tools-2coq6.svg?style=flat&label=AppVeyor)](https://ci.appveyor.com/project/JoaoRodrigues/pdb-tools-2coq6)
 [![codecov](https://codecov.io/gh/haddocking/pdb-tools/branch/master/graph/badge.svg)](https://codecov.io/gh/haddocking/pdb-tools)
-[![DOI](https://zenodo.org/badge/27217350.svg)](https://zenodo.org/badge/latestdoi/27217350)
+[![DOI](https://zenodo.org/badge/27217350.svg)](https://doi.org/10.12688/f1000research.17456.1)
 
 A swiss army knife for manipulating and editing PDB files.
 
@@ -42,9 +42,14 @@ recommended way as it makes updating/uninstalling rather simple:
 pip install pdb-tools
 ```
 
-If you want to install the latest development version, which might give you new
-features but also some bugs, see [here](#Installing-from-Source).
-
+Because we use semantic versioning in the development of `pdb-tools`, every bugfix
+or new feature results in a new version of the software that is automatically published
+on PyPI. As such, there is no difference between the code on github and the latest version
+you can install with `pip`. To update your installation to the latest version of the code
+run:
+```bash
+pip install --upgrade pdb-tools
+```
 
 ## What can I do with them?
 The names of the tools should be self-explanatory. Their command-line interface
@@ -99,24 +104,22 @@ We finally decided to write up a small publication describing the tools. If you
 used them in a project that is going to be published, please cite us:
 
 ```
-Rodrigues, J. P. G. L. M., Teixeira, J. M. C., Trellet, M. & Bonvin, A. M. J. J.
-pdb-tools: a swiss army knife for molecular structures. bioRxiv (2018). 
-doi:10.1101/483305
+Rodrigues JPGLM, Teixeira JMC, Trellet M and Bonvin AMJJ.
+pdb-tools: a swiss army knife for molecular structures. 
+F1000Research 2018, 7:1961 (https://doi.org/10.12688/f1000research.17456.1) 
 ```
 
 If you use a reference manager that supports BibTex, use this record:
 ```
-@article {Rodrigues483305,
-  author = {Rodrigues, Jo{\~a}o P.G.L.M. and Teixeira, Jo{\~a}o M.C. and Trellet, Mika{\"e}l and Bonvin, Alexandre M.J.J.},
-  title = {pdb-tools: a swiss army knife for molecular structures},
-  elocation-id = {483305},
-  year = {2018},
-  doi = {10.1101/483305},
-  publisher = {Cold Spring Harbor Laboratory},
-  abstract = {The pdb-tools are a collection of Python scripts for working with molecular structure data in the PDB format. They allow users to edit, convert, and validate PDB files, from the command-line, in a simple but efficient manner. The pdb-tools are implemented in Python, without any external dependencies, and are freely available under the open-source Apache License at https://github.com/haddocking/pdb-tools/ and on PyPI (https://pypi.org/project/pdb-tools/).},
-  URL = {https://www.biorxiv.org/content/early/2018/12/04/483305},
-  eprint = {https://www.biorxiv.org/content/early/2018/12/04/483305.full.pdf},
-  journal = {bioRxiv}
+@Article{ 10.12688/f1000research.17456.1,
+AUTHOR = { Rodrigues, JPGLM and Teixeira, JMC and Trellet, M and Bonvin, AMJJ},
+TITLE = {pdb-tools: a swiss army knife for molecular structures [version 1; peer review: 2 approved]
+},
+JOURNAL = {F1000Research},
+VOLUME = {7},
+YEAR = {2018},
+NUMBER = {1961},
+DOI = {10.12688/f1000research.17456.1}
 }
 ```
 

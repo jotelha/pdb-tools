@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright 2018 João Pedro Rodrigues
+# Copyright 2020 João Pedro Rodrigues
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,14 +16,18 @@
 # limitations under the License.
 
 """
-Selects all atoms matching the given segment identifier.
+Renames chain identifiers sequentially, based on TER records.
+
+Since HETATM records are not separated by TER records and usually come together
+at the end of the PDB file, this script will attempt to reassign their chain
+identifiers based on the changes it made to ATOM lines. This might lead to bad
+output in certain corner cases.
 
 Usage:
-    python pdb_selseg.py -<segment id> <pdb file>
+    python pdb_chainbows.py <pdb file>
 
 Example:
-    python pdb_selseg.py -C 1CTF.pdb  # selects segment C
-    python pdb_selseg.py -C,D 1CTF.pdb  # selects segments C and D
+    python pdb_chainbows.py 1CTF.pdb
 
 This program is part of the `pdb-tools` suite of utilities and should not be
 distributed isolatedly. The `pdb-tools` were created to quickly manipulate PDB
@@ -33,6 +37,7 @@ effort to maintain and compile. RIP.
 """
 
 import os
+import string
 import sys
 
 __author__ = "Joao Rodrigues"
@@ -44,7 +49,6 @@ def check_input(args):
     """
 
     # Defaults
-    option = ''
     fh = sys.stdin  # file handle
 
     if not len(args):
@@ -54,81 +58,62 @@ def check_input(args):
             sys.exit(1)
 
     elif len(args) == 1:
-        # One of two options: option & Pipe OR file & default option
-        if args[0].startswith('-'):
-            option = args[0][1:]
-            if sys.stdin.isatty():  # ensure the PDB data is streamed in
-                emsg = 'ERROR!! No data to process!\n'
-                sys.stderr.write(emsg)
-                sys.stderr.write(__doc__)
-                sys.exit(1)
-
-        else:
-            if not os.path.isfile(args[0]):
-                emsg = 'ERROR!! File not found or not readable: \'{}\'\n'
-                sys.stderr.write(emsg.format(args[0]))
-                sys.stderr.write(__doc__)
-                sys.exit(1)
-
-            fh = open(args[0], 'r')
-
-    elif len(args) == 2:
-        # Two options: option & File
-        if not args[0].startswith('-'):
-            emsg = 'ERROR! First argument is not an option: \'{}\'\n'
+        if not os.path.isfile(args[0]):
+            emsg = 'ERROR!! File not found or not readable: \'{}\'\n'
             sys.stderr.write(emsg.format(args[0]))
             sys.stderr.write(__doc__)
             sys.exit(1)
 
-        if not os.path.isfile(args[1]):
-            emsg = 'ERROR!! File not found or not readable: \'{}\'\n'
-            sys.stderr.write(emsg.format(args[1]))
-            sys.stderr.write(__doc__)
-            sys.exit(1)
-
-        option = args[0][1:]
-        fh = open(args[1], 'r')
+        fh = open(args[0], 'r')
 
     else:  # Whatever ...
+        emsg = 'ERROR!! Script takes 1 argument, not \'{}\'\n'
+        sys.stderr.write(emsg.format(len(args)))
         sys.stderr.write(__doc__)
         sys.exit(1)
 
-    # Validate option
-    option_set = set([o.upper().strip() for o in option.split(',') if o.strip()])
-    if not option_set:
-        emsg = 'ERROR!! You must provide at least one segment identifier\n'
-        sys.stderr.write(emsg)
-        sys.stderr.write(__doc__)
-        sys.exit(1)
-    else:
-        for seg_id in option_set:
-            if len(seg_id) > 4:
-                emsg = 'ERROR!! Segment identifier name is invalid: \'{}\'\n'
-                sys.stderr.write(emsg.format(seg_id))
-                sys.stderr.write(__doc__)
-                sys.exit(1)
-
-    return (option_set, fh)
+    return fh
 
 
-def select_segment_id(fhandle, segment_set):
-    """Filters the PDB file for specific segment identifiers.
-    """
+def set_chain_sequence(fhandle):
+    """Sets chains sequentially based on existing TER records."""
 
-    records = ('ATOM', 'HETATM', 'ANISOU')
+    chainlist = list(
+        string.digits[::-1] + string.ascii_lowercase[::-1] + string.ascii_uppercase[::-1]
+    )  # 987...zyx...cbaZYX...BCA.
+    max_chains = len(chainlist)
+
+    chain_map = {}  # for HETATM.
+
+    curchain = chainlist.pop()
+    records = ('ATOM', 'TER', 'ANISOU')
     for line in fhandle:
         if line.startswith(records):
-            if line[72:76].strip() not in segment_set:
-                continue
+            chain_map[line[21]] = curchain
+            line = line[:21] + curchain + line[22:]
+
+            if line.startswith('TER'):
+                try:
+                    curchain = chainlist.pop()
+                except IndexError:
+                    emsg = 'ERROR!! Structure contains more than {} TER records.\n'
+                    sys.stderr.write(emsg.format(max_chains))
+                    sys.stderr.write(__doc__)
+                    sys.exit(1)
+
+        elif line.startswith('HETATM'):
+            hetchain = chain_map[line[21]]
+            line = line[:21] + hetchain + line[22:]
+
         yield line
 
 
 def main():
     # Check Input
-    segment_set, pdbfh = check_input(sys.argv[1:])
+    pdbfh = check_input(sys.argv[1:])
 
     # Do the job
-    new_pdb = select_segment_id(pdbfh, segment_set)
+    new_pdb = set_chain_sequence(pdbfh)
 
     try:
         _buffer = []
