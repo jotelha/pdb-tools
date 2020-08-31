@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-# Copyright 2018 João Pedro Rodrigues, 2020 Johannes Hörmann
+# Copyright 2018 João Pedro Rodrigues
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,17 +16,17 @@
 # limitations under the License.
 
 """
-Give every atom its own residue id, starting from -<number> (default 1).
+Renumbers atom serials in the PDB file starting from a given value (default 1).
 
-Restarts numbering every 9999 residues, thus allows for residue number > 99999.
-
+Restarts numbering every 99999 atoms, thus allows for atom numbers > 99999.
 Numbering always restarts at 0, no matter the actual value of <number>.
+
 Usage:
-    python pdb_reres_by_atom_9999.py -<number> <pdb file>
+    python pdb_reatom.py -<number> <pdb file>
 
 Example:
-    python pdb_reres_by_atom_9999.py -10 1CTF.pdb  # renumbers from 10
-    python pdb_reres_by_atom_9999.py --1 1CTF.pdb  # renumbers from -1
+    python pdb_reatom.py -10 1CTF.pdb  # renumbers from 10
+    python pdb_reatom.py --1 1CTF.pdb  # renumbers from -1
 
 This program is part of the `pdb-tools` suite of utilities and should not be
 distributed isolatedly. The `pdb-tools` were created to quickly manipulate PDB
@@ -71,7 +71,7 @@ def check_input(args):
                 emsg = 'ERROR!! File not found or not readable: \'{}\'\n'
                 sys.stderr.write(emsg.format(args[0]))
                 sys.stderr.write(__doc__)
-            sys.exit(1)
+                sys.exit(1)
 
             fh = open(args[0], 'r')
 
@@ -100,43 +100,59 @@ def check_input(args):
     try:
         option = int(option)
     except ValueError:
-        emsg = 'ERROR!! You provided an invalid residue number: \'{}\''
+        emsg = 'ERROR!! You provided an invalid atom serial number: \'{}\''
         sys.stderr.write(emsg.format(option))
         sys.exit(1)
 
     return (option, fh)
 
 
-def pad_line(line):
-    """Helper function to pad line to 80 characters in case it is shorter"""
-    size_of_line = len(line)
-    if size_of_line < 80:
-        padding = 80 - size_of_line + 1
-        line = line.strip('\n') + ' ' * padding + '\n'
-    return line[:81]  # 80 + newline character
-
-
-def renumber_residues(fhandle, starting_resid):
-    """Resets the residue number column to start from a specific number.
+def renumber_atom_serials(fhandle, starting_value):
+    """Resets the atom serial number column to start from a specific number.
     """
-    _pad_line = pad_line
-    resid = starting_resid - 1  # account for first residue
-    records = ('ATOM', 'HETATM', 'TER', 'ANISOU')
+
+    # CONECT 1179  746 1184 1195 1203
+    fmt_CONECT = "CONECT{:>5s}{:>5s}{:>5s}{:>5s}{:>5s}" + " " * 49 + "\n"
+    char_ranges = (slice(6, 11), slice(11, 16),
+                   slice(16, 21), slice(21, 26), slice(26, 31))
+
+    serial_equiv = {'': ''}  # store for conect statements
+
+    serial = starting_value
+    records = ('ATOM', 'HETATM')
     warned = False
     for line in fhandle:
-        line = _pad_line(line)
-        if line.startswith('MODEL'):
-            resid = starting_resid - 1  # account for first residue
-            yield line
-
-        elif line.startswith(records):
-            resid += 1
-            if resid > 9999 and not warned:
-                emsg = 'WARNING: residue number above 9999, starting from 0 again.\n'
+        if line.startswith(records):
+            serial_equiv[line[6:11].strip()] = serial
+            yield line[:6] + str(serial % 100000).rjust(5) + line[11:]
+            serial += 1
+            if serial > 99999 and not warned:
+                emsg = 'WARNING: atom serial number above 99999.\n'
                 sys.stderr.write(emsg)
                 warned = True
 
-            yield line[:22] + str(resid % 10000).rjust(4) + line[26:]
+        elif line.startswith('ANISOU'):
+            # Keep atom id as previous atom
+            yield line[:6] + str(serial - 1).rjust(5) + line[11:]
+
+        elif line.startswith('CONECT'):
+            # 6:11, 11:16, 16:21, 21:26, 26:31
+            serials = [line[cr].strip() for cr in char_ranges]
+
+            # If not found, return default
+            new_serials = [str(serial_equiv.get(s, s)) for s in serials]
+            conect_line = fmt_CONECT.format(*new_serials)
+
+            yield conect_line
+            continue
+
+        elif line.startswith('MODEL'):
+            serial = starting_value
+            yield line
+
+        elif line.startswith('TER'):
+            yield line[:6] + str(serial).rjust(5) + line[11:]
+            serial += 1
 
         else:
             yield line
@@ -147,7 +163,7 @@ def main():
     starting_resid, pdbfh = check_input(sys.argv[1:])
 
     # Do the job
-    new_pdb = renumber_residues(pdbfh, starting_resid)
+    new_pdb = renumber_atom_serials(pdbfh, starting_resid)
 
     # Output results
     try:

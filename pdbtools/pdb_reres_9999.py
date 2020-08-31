@@ -20,6 +20,7 @@ Renumbers the residues of the PDB file starting from a given number (default 1).
 
 Restarts numbering every 9999 residues, thus allows for residue number > 99999.
 
+Numbering always restarts at 0, no matter the actual value of <number>.
 Usage:
     python pdb_reres.py -<number> <pdb file>
 
@@ -140,15 +141,13 @@ def renumber_residues(fhandle, starting_resid):
                     sys.stderr.write(emsg)
                     warned = True
 
-            yield line[:22] + str(resid % 9999).rjust(4) + line[26:]
+            yield line[:22] + str(resid % 10000).rjust(4) + line[26:]
 
         else:
             yield line
 
 
 def main():
-    print("Hallo")
-
     # Check Input
     starting_resid, pdbfh = check_input(sys.argv[1:])
 
