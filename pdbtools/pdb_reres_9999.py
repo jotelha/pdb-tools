@@ -1,146 +1,171 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Copyright 2018 João Pedro Rodrigues, 2020 Johannes Hörmann
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 """
-Renumbers residues in a PDB file.
+Renumbers the residues of the PDB file starting from a given number (default 1).
 
-usage: python pdb_reres.py <pdb file> [-chain <ids>][-resid <int>]
-example:
-    python pdb_reres.py 1CTF.pdb -resid 1 # renumbers from 1, sequentially
-    python pdb_reres.py 1CTF.pdb -chain -resid 1 # renumbers each chain from 1
-    python pdb_reres.py 1CTF.pdb -chain A -resid 1 # renumbers chain A from 1
+Restarts numbering every 9999 residues, thus allows for residue number > 99999.
 
-Author: {0} ({1})
+Usage:
+    python pdb_reres.py -<number> <pdb file>
 
-This program is part of the PDB tools distributed with HADDOCK
-or with the HADDOCK tutorial. The utilities in this package
-can be used to quickly manipulate PDB files, with the benefit
-of 'piping' several different commands. This is a rewrite of old
-FORTRAN77 code that was taking too much effort to compile. RIP.
+Example:
+    python pdb_reres.py -10 1CTF.pdb  # renumbers from 10
+    python pdb_reres.py --1 1CTF.pdb  # renumbers from -1
+
+This program is part of the `pdb-tools` suite of utilities and should not be
+distributed isolatedly. The `pdb-tools` were created to quickly manipulate PDB
+files using the terminal, and can be used sequentially, with one tool streaming
+data to another. They are based on old FORTRAN77 code that was taking too much
+effort to maintain and compile. RIP.
 """
 
 import os
-import re
 import sys
 
 __author__ = "Joao Rodrigues"
 __email__ = "j.p.g.l.m.rodrigues@gmail.com"
 
-USAGE = __doc__.format(__author__, __email__)
 
-
-def check_input(arg_list):
+def check_input(args):
+    """Checks whether to read from stdin/file and validates user input/options.
     """
-    Checks whether to read from stdin/file and validates user input/options.
-    """
-    # Dictionary to define options and default values,
-    # rules to validate input values, and handlers to parse them if needed.
-    # @joaomcteixeira
-    user_opts = {'resid': 1, 'chain': None}  # defaults if no opt is called
 
-    opts_defaults = {'resid': 1, 'chain': {}}  # default if opt *is* called
+    # Defaults
+    option = 1
+    fh = sys.stdin  # file handle
 
-    rules = {'resid': re.compile('[\-0-9]+'),  # option with numeric value
-             'chain': re.compile('[A-Za-z0-9,]+'),  # options with alpha value
-             }
-
-    handlers = {'resid': lambda x: int(x),
-                'chain': lambda x: set(x.split(','))}
-
-    pdbfh = None
-
-    # First argument is always file name
-    # If it is an option (or no args), assume reading from input stream
-    if not arg_list or arg_list[0][0] == '-':
-        if not sys.stdin.isatty():
-            pdbfh = sys.stdin
-        else:
-            sys.stderr.write(USAGE)
+    if not len(args):
+        # Reading from pipe with default option
+        if sys.stdin.isatty():
+            sys.stderr.write(__doc__)
             sys.exit(1)
-    else:
-        # 1 Aug 2018, Johannes Hörmann, johannes.hoermann@imtek.uni-freiburg.de
-        # if not sys.stdin.isatty():
-        #    sys.stderr.write('Error: multiple sources of input' + '\n')
-        #    sys.exit(1)
-        pdbfh = open(arg_list[0])
-        arg_list = arg_list[1:]
 
-    # Check for any combination of arguments
-    n_args, skip = len(arg_list), False
-    for idx, arg in enumerate(arg_list):
-        if skip:
-            skip = False
-            continue
-
-        # Option
-        if re.match('\-', arg):
-            name = arg[1:]
-            # Validate option name
-            if name not in rules:
-                sys.stderr.write('Unrecognized option: ' + arg + '\n')
+    elif len(args) == 1:
+        # One of two options: option & Pipe OR file & default option
+        if args[0].startswith('-'):
+            option = args[0][1:]
+            if sys.stdin.isatty():  # ensure the PDB data is streamed in
+                emsg = 'ERROR!! No data to process!\n'
+                sys.stderr.write(emsg)
+                sys.stderr.write(__doc__)
                 sys.exit(1)
 
-            rule = rules[name]
-
-            # Validate option value (if any)
-            if idx + 1 < n_args and arg_list[idx + 1][0] != '-':
-                raw_val = arg_list[idx + 1]
-                val = rule.match(raw_val)
-                if val:
-                    user_opts[name] = handlers[name](val.group(0))
-                    skip = True
-                else:
-                    sys.stderr.write('Bad value for \'' + arg + '\': '
-                                     + raw_val +'\n')
-                    sys.exit(1)
-            else:  # no-value option or last option
-                user_opts[name] = opts_defaults[name]
         else:
-            sys.stderr.write('Unrecognized option: ' + arg + '\n')
+            if not os.path.isfile(args[0]):
+                emsg = 'ERROR!! File not found or not readable: \'{}\'\n'
+                sys.stderr.write(emsg.format(args[0]))
+                sys.stderr.write(__doc__)
             sys.exit(1)
 
-    return (pdbfh, user_opts)
+            fh = open(args[0], 'r')
+
+    elif len(args) == 2:
+        # Two options: option & File
+        if not args[0].startswith('-'):
+            emsg = 'ERROR! First argument is not an option: \'{}\'\n'
+            sys.stderr.write(emsg.format(args[0]))
+            sys.stderr.write(__doc__)
+            sys.exit(1)
+
+        if not os.path.isfile(args[1]):
+            emsg = 'ERROR!! File not found or not readable: \'{}\'\n'
+            sys.stderr.write(emsg.format(args[1]))
+            sys.stderr.write(__doc__)
+            sys.exit(1)
+
+        option = args[0][1:]
+        fh = open(args[1], 'r')
+
+    else:  # Whatever ...
+        sys.stderr.write(__doc__)
+        sys.exit(1)
+
+    # Validate option
+    try:
+        option = int(option)
+    except ValueError:
+        emsg = 'ERROR!! You provided an invalid residue number: \'{}\''
+        sys.stderr.write(emsg.format(option))
+        sys.exit(1)
+
+    return (option, fh)
 
 
-def _renumber_pdb_residue(fhandle, opt_dict):
-    """Keeping code organized ..."""
+def pad_line(line):
+    """Helper function to pad line to 80 characters in case it is shorter"""
+    size_of_line = len(line)
+    if size_of_line < 80:
+        padding = 80 - size_of_line + 1
+        line = line.strip('\n') + ' ' * padding + '\n'
+    return line[:81]  # 80 + newline character
 
-    opts = opt_dict
-    resi = opts['resid'] - 1
 
-    # if chain is none, renumber everyone
-    # if chain is not none but empty, restart at each chain
-    # otherwise, renumber only chain
-    on_chain = opts.get('chain') is not None
-
-    prev_chain, prev_resi = None, None
+def renumber_residues(fhandle, starting_resid):
+    """Resets the residue number column to start from a specific number.
+    """
+    _pad_line = pad_line
+    prev_resid = None  # tracks chain and resid
+    resid = starting_resid - 1  # account for first residue
+    records = ('ATOM', 'HETATM', 'TER', 'ANISOU')
+    warned = False
     for line in fhandle:
-        if line.startswith(('ATOM', 'HETATM', 'TER')):
-            if line[21] != prev_chain:
-                if on_chain:
-                    resi = opts['resid'] - 1
-                prev_chain = line[21]
+        line = _pad_line(line)
+        if line.startswith('MODEL'):
+            resid = starting_resid - 1  # account for first residue
+            prev_resid = None  # tracks chain and resid
+            yield line
 
-            if line[22:26] != prev_resi:
-                prev_resi = line[22:26]
-                resi += 1
+        elif line.startswith(records):
+            line_resuid = line[17:27]
+            if line_resuid != prev_resid:
+                prev_resid = line_resuid
+                resid += 1
+                if resid > 9999 and not warned:
+                    emsg = 'WARNING: residue number above 9999, starting from 0 again.\n'
+                    sys.stderr.write(emsg)
+                    warned = True
 
-            if not opts.get('chain') or line[21] in opts['chain']:
-                yield line[:22] + str(resi % 9999).rjust(4) + line[26:]
-                continue
+            yield line[:22] + str(resid % 9999).rjust(4) + line[26:]
 
-        yield line
+        else:
+            yield line
 
 
-if __name__ == '__main__':
+def main():
+    print("Hallo")
 
     # Check Input
-    pdbfh, options = check_input(sys.argv[1:])
+    starting_resid, pdbfh = check_input(sys.argv[1:])
 
     # Do the job
-    new_pdb = _renumber_pdb_residue(pdbfh, options)
+    new_pdb = renumber_residues(pdbfh, starting_resid)
 
+    # Output results
     try:
-        sys.stdout.write(''.join(new_pdb))
+        _buffer = []
+        _buffer_size = 5000  # write N lines at a time
+        for lineno, line in enumerate(new_pdb):
+            if not (lineno % _buffer_size):
+                sys.stdout.write(''.join(_buffer))
+                _buffer = []
+            _buffer.append(line)
+
+        sys.stdout.write(''.join(_buffer))
         sys.stdout.flush()
     except IOError:
         # This is here to catch Broken Pipes
@@ -149,6 +174,10 @@ if __name__ == '__main__':
         pass
 
     # last line of the script
-    # We can close it even if it is sys.stdin
+    # Close file handle even if it is sys.stdin, no problem here.
     pdbfh.close()
     sys.exit(0)
+
+
+if __name__ == '__main__':
+    main()
